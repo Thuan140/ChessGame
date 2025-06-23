@@ -7,8 +7,10 @@ import com.example.fx.model.PieceType;
 public class MoveValidator {
     private Piece[][] board;
     private int BOARD_SIZE;
+    private Board fullBoard;
 
     public MoveValidator(Board board, int boardSize) {
+        this.fullBoard = board;
         this.board = board.getGrid();
         this.BOARD_SIZE = boardSize;
     }
@@ -44,7 +46,6 @@ public class MoveValidator {
 
         if (!isValid) return false;
 
-        // Thử di chuyển tạm thời để xem có bị chiếu không
         Piece temp = board[endRow][endCol];
         board[endRow][endCol] = piece;
         board[startRow][startCol] = null;
@@ -61,17 +62,30 @@ public class MoveValidator {
         int dir = (piece.getColor() == ColorType.WHITE) ? -1 : 1;
         int startRowForPawn = (piece.getColor() == ColorType.WHITE) ? 6 : 1;
 
+        // Đi thẳng
         if (startCol == endCol && board[endRow][endCol] == null) {
             if (endRow == startRow + dir) return true;
             if (startRow == startRowForPawn && endRow == startRow + 2 * dir &&
-                    board[startRow + dir][startCol] == null)
+                board[startRow + dir][startCol] == null)
                 return true;
         }
 
-        if (Math.abs(startCol - endCol) == 1 && endRow == startRow + dir &&
-                board[endRow][endCol] != null &&
-                board[endRow][endCol].getColor() != piece.getColor()) {
-            return true;
+        // Ăn chéo
+        if (Math.abs(startCol - endCol) == 1 && endRow == startRow + dir) {
+            // Ăn thường
+            if (board[endRow][endCol] != null && board[endRow][endCol].getColor() != piece.getColor()) {
+                return true;
+            }
+            // Bắt tốt qua đường
+            int[] lastMove = fullBoard.getLastPawnDoubleMove();
+            if (lastMove != null &&
+                lastMove[0] == startRow && lastMove[1] == endCol) {
+                Piece adjacentPawn = board[startRow][endCol];
+                if (adjacentPawn != null && adjacentPawn.getType() == PieceType.PAWN &&
+                    adjacentPawn.getColor() != piece.getColor()) {
+                    return true;
+                }
+            }
         }
 
         return false;
@@ -79,7 +93,6 @@ public class MoveValidator {
 
     private boolean isValidRookMove(int startRow, int startCol, int endRow, int endCol) {
         if (startRow != endRow && startCol != endCol) return false;
-
         if (startRow == endRow) {
             int step = (endCol > startCol) ? 1 : -1;
             for (int c = startCol + step; c != endCol; c += step) {
@@ -102,11 +115,9 @@ public class MoveValidator {
 
     private boolean isValidBishopMove(int startRow, int startCol, int endRow, int endCol) {
         if (Math.abs(startRow - endRow) != Math.abs(startCol - endCol)) return false;
-
         int rowStep = (endRow > startRow) ? 1 : -1;
         int colStep = (endCol > startCol) ? 1 : -1;
         int len = Math.abs(endRow - startRow);
-
         for (int i = 1; i < len; i++) {
             if (board[startRow + i * rowStep][startCol + i * colStep] != null) return false;
         }
@@ -115,7 +126,7 @@ public class MoveValidator {
 
     private boolean isValidQueenMove(int startRow, int startCol, int endRow, int endCol) {
         return isValidRookMove(startRow, startCol, endRow, endCol) ||
-                isValidBishopMove(startRow, startCol, endRow, endCol);
+               isValidBishopMove(startRow, startCol, endRow, endCol);
     }
 
     private boolean isValidKingMove(int startRow, int startCol, int endRow, int endCol) {
@@ -126,7 +137,6 @@ public class MoveValidator {
 
     public boolean isInCheck(ColorType color) {
         int kingRow = -1, kingCol = -1;
-
         for (int r = 0; r < board.length; r++) {
             for (int c = 0; c < board[r].length; c++) {
                 Piece piece = board[r][c];
@@ -137,7 +147,6 @@ public class MoveValidator {
                 }
             }
         }
-
         for (int r = 0; r < board.length; r++) {
             for (int c = 0; c < board[r].length; c++) {
                 Piece piece = board[r][c];
@@ -148,7 +157,6 @@ public class MoveValidator {
                 }
             }
         }
-
         return false;
     }
 

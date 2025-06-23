@@ -13,13 +13,14 @@ import javafx.scene.control.ChoiceDialog;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.GridPane;
+import javafx.scene.media.Media;
+import javafx.scene.media.MediaPlayer;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.Stage;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
+import java.io.File;
+import java.util.*;
 
 public class ChessGame extends Application {
     public static final int TILE_SIZE = 80;
@@ -31,15 +32,24 @@ public class ChessGame extends Application {
     private MoveValidator moveValidator;
     private int startRow, startCol;
 
+    private Media moveSound;
+    private Media captureSound;
+
+    private Rectangle[][] tiles = new Rectangle[BOARD_SIZE][BOARD_SIZE];
+    private List<Rectangle> highlightedTiles = new ArrayList<>();
+
     @Override
     public void start(Stage stage) {
         GridPane grid = new GridPane();
         moveValidator = new MoveValidator(board, BOARD_SIZE);
 
+        loadSounds();
+
         for (int row = 0; row < BOARD_SIZE; row++) {
             for (int col = 0; col < BOARD_SIZE; col++) {
                 Rectangle tile = new Rectangle(TILE_SIZE, TILE_SIZE);
                 tile.setFill((row + col) % 2 == 0 ? Color.WHITE : Color.DARKGRAY);
+                tiles[row][col] = tile;
                 grid.add(tile, col, row);
             }
         }
@@ -52,10 +62,19 @@ public class ChessGame extends Application {
         stage.show();
     }
 
+    private void loadSounds() {
+        try {
+            moveSound = new Media(new File("src/main/resources/sounds/move.mp3").toURI().toString());
+            captureSound = new Media(new File("src/main/resources/sounds/capture.mp3").toURI().toString());
+        } catch (Exception e) {
+            System.err.println("Không thể tải âm thanh: " + e.getMessage());
+        }
+    }
+
     private void setupPieces(GridPane grid) {
         PieceType[] layout = {
-            PieceType.ROOK, PieceType.KNIGHT, PieceType.BISHOP, PieceType.QUEEN,
-            PieceType.KING, PieceType.BISHOP, PieceType.KNIGHT, PieceType.ROOK
+                PieceType.ROOK, PieceType.KNIGHT, PieceType.BISHOP, PieceType.QUEEN,
+                PieceType.KING, PieceType.BISHOP, PieceType.KNIGHT, PieceType.ROOK
         };
 
         for (int col = 0; col < BOARD_SIZE; col++) {
@@ -77,6 +96,27 @@ public class ChessGame extends Application {
         addDragHandlers(view, grid);
     }
 
+    private void highlightValidMoves(Piece piece, int row, int col) {
+        clearHighlights();
+        for (int r = 0; r < BOARD_SIZE; r++) {
+            for (int c = 0; c < BOARD_SIZE; c++) {
+                if (moveValidator.isValidMove(piece, row, col, r, c)) {
+                    tiles[r][c].setFill(Color.LIGHTGREEN);
+                    highlightedTiles.add(tiles[r][c]);
+                }
+            }
+        }
+    }
+
+    private void clearHighlights() {
+        for (Rectangle tile : highlightedTiles) {
+            int row = GridPane.getRowIndex(tile);
+            int col = GridPane.getColumnIndex(tile);
+            tile.setFill((row + col) % 2 == 0 ? Color.WHITE : Color.DARKGRAY);
+        }
+        highlightedTiles.clear();
+    }
+
     private void addDragHandlers(ImageView view, GridPane grid) {
         view.setOnMousePressed(e -> {
             for (int r = 0; r < BOARD_SIZE; r++) {
@@ -84,10 +124,11 @@ public class ChessGame extends Application {
                     Piece p = board.get(r, c);
                     if (p != null && p.getImageView() == view) {
                         if ((isWhiteTurn && p.getColor() == ColorType.WHITE) ||
-                            (!isWhiteTurn && p.getColor() == ColorType.BLACK)) {
+                                (!isWhiteTurn && p.getColor() == ColorType.BLACK)) {
                             selectedPiece = p;
                             startRow = r;
                             startCol = c;
+                            highlightValidMoves(selectedPiece, startRow, startCol);
                         }
                         return;
                     }
@@ -101,23 +142,34 @@ public class ChessGame extends Application {
             int endRow = (int) (e.getSceneY() / TILE_SIZE);
             int endCol = (int) (e.getSceneX() / TILE_SIZE);
 
+            clearHighlights();
+
             if (moveValidator.isValidMove(selectedPiece, startRow, startCol, endRow, endCol)) {
                 Piece captured = board.get(endRow, endCol);
-                if (captured != null) {
+
+                if (captured == null && selectedPiece.getType() == PieceType.PAWN && startCol != endCol) {
+                    int dir = selectedPiece.getColor() == ColorType.WHITE ? 1 : -1;
+                    Piece enPassantTarget = board.get(endRow + dir, endCol);
+                    if (enPassantTarget != null && enPassantTarget.getType() == PieceType.PAWN) {
+                        grid.getChildren().remove(enPassantTarget.getImageView());
+                        board.set(endRow + dir, endCol, null);
+                        new MediaPlayer(captureSound).play();
+                    }
+                } else if (captured != null) {
                     grid.getChildren().remove(captured.getImageView());
+                    new MediaPlayer(captureSound).play();
+                } else {
+                    new MediaPlayer(moveSound).play();
                 }
 
                 board.move(startRow, startCol, endRow, endCol);
                 grid.getChildren().remove(selectedPiece.getImageView());
                 grid.add(selectedPiece.getImageView(), endCol, endRow);
 
-                // ✅ PHONG CẤP TỐT
-                if (selectedPiece.getType() == PieceType.PAWN &&
-                    (endRow == 0 || endRow == BOARD_SIZE - 1)) {
+                if (selectedPiece.getType() == PieceType.PAWN && (endRow == 0 || endRow == BOARD_SIZE - 1)) {
                     promotePawn(endRow, endCol, selectedPiece.getColor(), grid);
                 }
 
-                // ✅ CHECKMATE
                 if (moveValidator.isCheckmate(isWhiteTurn ? ColorType.BLACK : ColorType.WHITE)) {
                     Alert alert = new Alert(Alert.AlertType.INFORMATION);
                     alert.setTitle("Checkmate");
@@ -148,9 +200,9 @@ public class ChessGame extends Application {
             board.set(row, col, newPiece);
 
             grid.getChildren().removeIf(node ->
-                GridPane.getRowIndex(node) == row &&
-                GridPane.getColumnIndex(node) == col &&
-                node instanceof ImageView
+                    GridPane.getRowIndex(node) == row &&
+                            GridPane.getColumnIndex(node) == col &&
+                            node instanceof ImageView
             );
 
             grid.add(newPiece.getImageView(), col, row);
