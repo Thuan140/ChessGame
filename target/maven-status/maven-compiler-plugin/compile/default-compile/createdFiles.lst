@@ -1,0 +1,8 @@
+com\example\fx\game\MoveValidator.class
+com\example\fx\common\Constants.class
+com\example\fx\game\Board.class
+com\example\fx\model\Piece.class
+com\example\fx\ui\ChessGame.class
+com\example\fx\model\PieceType.class
+com\example\fx\model\ColorType.class
+com\example\fx\game\MoveValidator$1.class

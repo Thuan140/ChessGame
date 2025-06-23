@@ -1,4 +1,4 @@
-package com.example.fx;
+package com.example.fx.model;
 
 
 public enum PieceType {
